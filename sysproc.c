@@ -89,3 +89,35 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_netid(void) {
+  cprintf("sv2657\n");
+  return 0;
+}
+
+int
+sys_nice(void) {
+  int pid, value;
+  int old_value;
+  int ret;
+
+  if (argint(0, &pid) < 0 || argint(1, &value) <0)
+    return -1;
+
+  if (value < 1 || value > 5)
+    return -1;
+
+  ret = setnice(pid, value, &old_value);
+
+  if (ret < 0)
+    return -1;
+
+  return old_value;
+}
+
+int
+sys_getprocs(void)
+{
+  return getprocs();
+}

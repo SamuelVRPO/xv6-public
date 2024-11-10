@@ -7,6 +7,10 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#define RR_SCHEDULER 1
+#define PRIORITY_SCHEDULER 2
+#define MAX_NICE 5
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -88,6 +92,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->nice = 3;
 
   release(&ptable.lock);
 
@@ -325,33 +330,74 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
-  for(;;){
-    // Enable interrupts on this processor.
+
+  for(;;) {
     sti();
 
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+    #if SCHEDULER == RR_SCHEDULER
+
+      acquire(&ptable.lock);
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE)
+          continue;
+
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+    #elif SCHEDULER == PRIORITY_SCHEDULER
+
+      int highest_priority;
+
+      acquire(&ptable.lock);
+
+      highest_priority = MAX_NICE + 1;
+
+      // First, find highest priority among runnable processes
+      for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->state != RUNNABLE)
+          continue;
+        if (p->nice < highest_priority) {
+          highest_priority = p->nice;
+        }
+      }
+
+      // If no runnable processes, release lock and continue
+      if (highest_priority == MAX_NICE + 1) {
+        release(&ptable.lock);
         continue;
+      }
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      // Schedule all runnable processes with highest priority in RR
+      for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->state != RUNNABLE)
+          continue;
+        if (p->nice != highest_priority)
+          continue;
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
 
+        c->proc = 0;
+      }
+
+      release(&ptable.lock);
+    #else
+      #error "Unknown scheduler type"
+    #endif
   }
 }
 
@@ -531,4 +577,60 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int
+setnice(int pid, int value, int *old_value)
+{
+  struct proc *p;
+  int found = 0;
+
+  acquire(&ptable.lock);
+
+  if (pid == 0 || pid == myproc()->pid) {
+    p = myproc();
+    *old_value = p->nice;
+    p->nice = value;
+    found = 1;
+  } else {
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if (p->pid == pid) {
+        *old_value = p->nice;
+        p->nice = value;
+        found = 1;
+        break;
+      }
+    }
+  }
+
+  release(&ptable.lock);
+
+  if (!found) 
+    return -1;
+
+  return 0;
+}
+
+int
+getprocs()
+{
+  struct proc *p;
+  //Enables interrupts on this processor.
+  sti();
+
+  //Loop over process table looking for process with pid.
+  acquire(&ptable.lock);
+  cprintf("NAME \t PID \t STATE \t NICE \n");
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state == SLEEPING)
+      cprintf("%s \t %d \t SLEEPING \t %d \n ", p->name,p->pid,p->nice);
+    else if(p->state == RUNNING)
+      cprintf("%s \t %d \t RUNNING \t %d \n ", p->name,p->pid,p->nice);
+    else if(p->state == RUNNABLE)
+      cprintf("%s \t %d \t RUNNABLE \t %d \n ", p->name,p->pid,p->nice);
+    else if(p->state == ZOMBIE)
+      cprintf("%s \t %d \t ZOMBIE \t %d \n ", p->name,p->pid,p->nice);
+  }
+  release(&ptable.lock);
+  return 24;
 }
