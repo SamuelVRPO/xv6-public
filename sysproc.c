@@ -89,3 +89,14 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_trace(void)
+{
+  int enable;
+  if(argint(0, &enable) < 0)
+    return -1;
+  struct proc *p = myproc();
+  p->strace_enabled = enable;
+  return 0;
+}
