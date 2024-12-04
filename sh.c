@@ -90,15 +90,45 @@ runcmd(struct cmd *cmd)
     // Handle strace on and off commands
     if(strcmp(ecmd->argv[0], "strace") == 0) {
       if(ecmd->argv[1] == 0) {
-        printf(1, "Usage: strace on|off\n");
+        printf(1, "Usage: strace on|off|run <command>\n");
       } else if(strcmp(ecmd->argv[1], "on") == 0) {
         strace_mode = 1;
         printf(1, "strace enabled\n");
       } else if(strcmp(ecmd->argv[1], "off") == 0) {
         strace_mode = 0;
         printf(1, "strace disabled\n");
+      } else if(strcmp(ecmd->argv[1], "run") == 0){
+        // Ensure command is provided
+        if(ecmd->argv[2] == 0) {
+          printf(1, "Usage: strace run <command>\n");
+          return;
+        }
+
+        // Shift arguments to remove 'strace' and 'run'
+        int i;
+        for(i = 0; ecmd->argv[i+2] != 0; i++) {
+          ecmd->argv[i] = ecmd->argv[i+2];
+        }
+        ecmd->argv[i] = 0;
+
+        int pid = fork();
+        if(pid < 0) {
+          printf(2, "fork failed\n");
+          exit();
+        }
+        if(pid == 0) {
+          trace(1);
+          exec(ecmd->argv[0], ecmd->argv);
+          printf(2, "exec %s failed");
+          exit();
+        }
+
+        wait();
+
+        return;
+
       } else {
-        printf(1, "Usage: strace on|off\n");
+        printf(1, "Usage: strace on|off|run <command>\n");
       }
       return;
     }
@@ -125,13 +155,8 @@ runcmd(struct cmd *cmd)
     }
     wait();
 
-    // Reset strace_mode after executing the command
-    if(strace_mode) {
-      strace_mode = 0;
-      trace(0);
-    } else {
-      trace(0);
-    }
+    trace(0);
+
     break;
 
   case REDIR:
@@ -219,41 +244,6 @@ main(void)
         printf(2, "cannot cd %s\n", buf+3);
       continue;
     }
-    
-    // if(strcmp(argv[0], "strace") == 0) {
-    //   if(argc < 2) {
-    //     printf(1, "Usage: strace on|off\n");
-    //     continue;
-    //   }
-    //   if(strcmp(argv[1], "on") == 0) {
-    //     strace_mode = 1;
-    //   } else if(strcmp(argv[1], "off") == 0) {
-    //     strace_mode = 0;
-    //   } else {
-    //     printf(1, "Usage: strace on|off\n");
-    //   }
-    //   continue;
-    // }
-
-    // int pid = fork();
-    // if(pid == 0) {
-    //   // Child process
-    //   if(strace_mode) {
-    //     trace(1);
-    //   }
-    //   exec(argv[0], argv);
-    //   printf(2, "exec %s failed\n", argv[0]);
-    //   exit();
-    // } else if(pid > 0) {
-    //   // Parent process
-    //   wait();
-    //   if(strace_mode) {
-    //     trace(0);
-    //     strace_mode = 0;
-    //   }
-    // } else {
-    //   printf(2, "fork failed\n");
-    // }
 
     if(fork1() == 0)
       runcmd(parsecmd(buf));
