@@ -24,6 +24,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int trace(int enable);
+int trace_filter(const char *syscall_name);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -112,6 +112,9 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  // Add strace filter
+  p->strace_filter[0] = '\0';
+
   return p;
 }
 

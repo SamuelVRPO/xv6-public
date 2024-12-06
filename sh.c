@@ -79,18 +79,46 @@ runcmd(struct cmd *cmd)
     if(ecmd->argv[0] == 0)
       exit();
 
-    // if(strcmp(ecmd->argv[0], "cd") == 0) {
-    //   if(ecmd->argv[1] == 0) {
-    //     printf(2, "cd: missing argument\n");
-    //   } else if(chdir(ecmd->argv[1]) < 0) {
-    //     printf(2, "cd: cannot change directory to %s\n", ecmd->argv[1]);
-    //   }
-    //   return;
-    // }
-    // Handle strace on and off commands
     if(strcmp(ecmd->argv[0], "strace") == 0) {
       if(ecmd->argv[1] == 0) {
-        printf(1, "Usage: strace on|off|run <command>\n");
+        printf(1, "Usage: strace on|off|run <command>|-e <syscall> <command>\n");
+      } else if(strcmp(ecmd->argv[1], "-e") == 0) {
+        if(ecmd->argv[2] == 0) {
+          printf(1, "Usage: strace -e <syscall> <command>\n");
+          return;
+        }
+
+        char *filter_syscall = ecmd->argv[2];
+        if(ecmd->argv[3] == 0) {
+          printf(1, "Usage: strace -e <syscall> <command>\n");
+          return;
+        }
+
+        int i;
+        for(i = 0; ecmd->argv[i+3] != 0; i++) {
+          ecmd->argv[i] = ecmd->argv[i+3];
+        }
+        ecmd->argv[i] = 0;
+
+        int pid = fork();
+        if(pid < 0) {
+          printf(2, "fork failed\n");
+          exit();
+        }
+        if(pid == 0) {
+          trace(1);
+          trace_filter(filter_syscall);
+          exec(ecmd->argv[0], ecmd->argv);
+          printf(2, "exec %s failed\n", ecmd->argv[0]);
+          exit();
+        }
+
+        wait();
+
+        trace(0);
+        trace_filter("");
+
+        return;
       } else if(strcmp(ecmd->argv[1], "on") == 0) {
         strace_mode = 1;
         printf(1, "strace enabled\n");

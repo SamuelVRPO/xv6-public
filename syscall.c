@@ -130,6 +130,7 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_trace(void);
+extern int sys_trace_filter(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -154,6 +155,7 @@ static int (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_trace]   sys_trace,
+[SYS_trace_filter] sys_trace_filter,
 };
 
 void
@@ -164,12 +166,18 @@ syscall(void)
   num = curproc->tf->eax;
   
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    int retval = syscalls[num]();
-    curproc->tf->eax = retval;
+    curproc->tf->eax = syscalls[num]();
 
     if(curproc->strace_enabled) {
-      cprintf("TRACE: pid = %d | command_name = %s | syscall = %s | return value = %d\n",
-              curproc->pid, curproc->name, syscallnames[num], retval);
+      int retval = curproc->tf->eax;
+      char *syscall_name = (num < NELEM(syscallnames) && syscallnames[num]) ? syscallnames[num] : "unknown";
+
+      if(curproc->strace_filter[0] == '\0' ||
+         (strlen(curproc->strace_filter) == strlen(syscall_name) &&
+          strncmp(curproc->strace_filter, syscall_name, strlen(curproc->strace_filter) + 1) == 0)) {
+        cprintf("TRACE: pid = %d | command_name = %s | syscall = %s | return value = %d\n",
+                curproc->pid, curproc->name, syscallnames[num], retval);
+      }
     }
   } else {
     cprintf("%d %s: unknown sys call %d\n",

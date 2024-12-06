@@ -100,3 +100,21 @@ sys_trace(void)
   p->strace_enabled = enable;
   return 0;
 }
+
+int
+sys_trace_filter(void)
+{
+  char *syscall_name;
+  if(argstr(0, &syscall_name) < 0)
+    return -1;
+
+  struct proc *curproc = myproc();
+  if(syscall_name[0] == '\0') {
+    // Empty string clears the filter
+    curproc->strace_filter[0] = '\0';
+  } else {
+    safestrcpy(curproc->strace_filter, syscall_name, sizeof(curproc->strace_filter));
+  }
+
+  return 0;
+}
